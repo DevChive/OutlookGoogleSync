@@ -1,15 +1,4 @@
-﻿/**
- *
- * Change Log:
- *  2015-1114 - v2.0.6.2 [DJS]
- *    - synchronize(), suppress annoying messages, "Please ensure you can access the internet.."
- *    * GetMyGoogleCalendars_Click(), left this one alone because it's a button click
- *  2015-1111 - v2.0.6.1 [DJS]
- *    + sync_Start(), Suppress annoying MsgBox when we're offline
- *    + checkSyncMilestone(), Suppress annoying "celebration" post
- */
-
-using Google.Apis.Calendar.v3.Data;
+﻿using Google.Apis.Calendar.v3.Data;
 using log4net;
 using Microsoft.Office.Interop.Outlook;
 using System;
@@ -480,19 +469,10 @@ namespace OutlookGoogleCalendarSync {
             Boolean syncOk = false;
             int failedAttempts = 0;
             Social.TrackSync();
-
-            while (!syncOk)
-            {
-                // DJS - suppress annoying MsgBox when we're offline
-                //if (failedAttempts > 0 &&
-                //    MessageBox.Show("The synchronisation failed. Do you want to try again?", "Sync Failed",
-                //    MessageBoxButtons.YesNo, MessageBoxIcon.Exclamation) == System.Windows.Forms.DialogResult.No)
-                //{
-                //  bSyncNow.Text = "Start Sync";
-                //  notificationTray.UpdateItem("sync", "&Sync Now");
-                //  break;
-                //}
-                if (failedAttempts > 0)
+            while (!syncOk) {
+                if (failedAttempts > 0 &&
+                    MessageBox.Show("The synchronisation failed. Do you want to try again?", "Sync Failed",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Exclamation) == System.Windows.Forms.DialogResult.No) 
                 {
                     bSyncNow.Text = "Start Sync";
                     notificationTray.UpdateItem("sync", "&Sync Now");
@@ -545,7 +525,7 @@ namespace OutlookGoogleCalendarSync {
             bSyncNow.Enabled = true;
             bSyncNow.Tag = 0; //Reset Push flag regardless of success (don't want it trying every 2 mins)
 
-            checkSyncMilestone(); // DJS - annoying MsgBox ahead!
+            checkSyncMilestone();
         }
 
         private Boolean synchronize() {
@@ -574,16 +554,13 @@ namespace OutlookGoogleCalendarSync {
                 Logboxout("Unable to connect to the Google calendar. The following error occurred:");
                 Logboxout(ex.Message);
                 log.Error(ex.StackTrace);
-                if (Settings.Instance.Proxy.Type == "IE")
-                {
-                    // 2015-1114 - Removed by DJS to suppress annoying messages
-                    //if (MessageBox.Show("Please ensure you can access the internet with Internet Explorer.\r\n" +
-                    //    "Test it now? If successful, please retry synchronising your calendar.",
-                    //    "Test IE Internet Access",
-                    //    MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                    //{
-                    //  System.Diagnostics.Process.Start("iexplore.exe", "http://www.google.com");
-                    //}
+                if (Settings.Instance.Proxy.Type == "IE") {
+                    if (MessageBox.Show("Please ensure you can access the internet with Internet Explorer.\r\n"+
+                        "Test it now? If successful, please retry synchronising your calendar.", 
+                        "Test IE Internet Access",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) {
+                        System.Diagnostics.Process.Start("iexplore.exe", "http://www.google.com");
+                    }
                 }
                 return false;
             }
@@ -1402,12 +1379,10 @@ namespace OutlookGoogleCalendarSync {
                 case 250: isMilestone = true; break;
                 case 1000: isMilestone = true; break;
             }
-
-            // DJS - Removed annoying messagebox
-            //if (isMilestone) {
-            //    if (MessageBox.Show(blurb, "Spread the Word", MessageBoxButtons.OKCancel, MessageBoxIcon.Exclamation) == System.Windows.Forms.DialogResult.OK)
-            //        tabApp.SelectedTab = tabPage_Social;
-            //}
+            if (isMilestone) {
+                if (MessageBox.Show(blurb, "Spread the Word", MessageBoxButtons.OKCancel, MessageBoxIcon.Exclamation) == System.Windows.Forms.DialogResult.OK)
+                    tabApp.SelectedTab = tabPage_Social;
+            }
         }
 
         private void btSocialTweet_Click(object sender, EventArgs e) {
@@ -1437,10 +1412,5 @@ namespace OutlookGoogleCalendarSync {
         }
 
         #endregion
-
-        private void MainForm_Load(object sender, EventArgs e)
-        {
-
-        }
     }
 }

@@ -10,11 +10,11 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("OutlookGoogleCalendarSync")]
-[assembly: AssemblyDescription("Modified by DJS")]
+[assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Paul Woolcock")]
 [assembly: AssemblyProduct("Outlook Google Calendar Sync")]
-[assembly: AssemblyCopyright("Copyright 2015")]
+[assembly: AssemblyCopyright("Copyright 2014")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -29,4 +29,4 @@ using System.Runtime.InteropServices;
 // You can specify all the values or you can use the default the Revision and 
 // Build Numbers by using the '*' as shown below:
 [assembly: AssemblyVersion("2.0.*")]
-[assembly: AssemblyFileVersionAttribute("2.0.6.2")]
+[assembly: AssemblyFileVersionAttribute("2.0.6.0")]

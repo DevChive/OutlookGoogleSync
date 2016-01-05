@@ -40,16 +40,14 @@ namespace OutlookGoogleCalendarSync {
             Application.SetCompatibleTextRenderingDefault(false);
 
             #region SplashScreen
-
-            // DJS - Removed annoying splashscreen
-            //Form splash = new Splash();
-            //splash.Show();
-            //DateTime splashed = DateTime.Now;
-            //while (DateTime.Now < splashed.AddSeconds((System.Diagnostics.Debugger.IsAttached ? 1 : 8)) && !splash.IsDisposed) {
-            //    Application.DoEvents();
-            //    System.Threading.Thread.Sleep(100);
-            //}
-            //if (!splash.IsDisposed) splash.Close();
+            Form splash = new Splash();
+            splash.Show();
+            DateTime splashed = DateTime.Now;
+            while (DateTime.Now < splashed.AddSeconds((System.Diagnostics.Debugger.IsAttached ? 1 : 8)) && !splash.IsDisposed) {
+                Application.DoEvents();
+                System.Threading.Thread.Sleep(100);
+            }
+            if (!splash.IsDisposed) splash.Close();
             #endregion
 
             log.Debug("Loading settings from file.");
