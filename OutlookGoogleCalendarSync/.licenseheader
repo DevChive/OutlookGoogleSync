@@ -1,0 +1,31 @@
+﻿extensions: designer.cs generated.cs
+extensions: .cs .cpp .h
+/* Copyright Xeno Innovations, Inc. 2015-2016
+ * Author:  Damian Suess
+ * Date:    %CurrentYear%-%CurrentMonth%-%CurrentDay%
+ * File:    %FileName%
+ * Description:
+ *  
+ * To Do:
+ * Change Log:
+ *  %CurrentYear%-%CurrentMonth%%CurrentDay% * Initial creation
+ */
+
+extensions: .aspx .ascx
+<%-- 
+Sample license text.
+--%>
+extensions: .vb
+'Sample license text.
+extensions:  .xml .config .xsd
+<!--
+Copyright Xeno Innovations, Inc. 2015-2016
+ * Author:  Damian Suess
+ * Date:    %CurrentYear%-%CurrentMonth%-%CurrentDay%
+ * File:    %FileName%
+ * Description:
+ *  
+ * To Do:
+ * Change Log:
+ *  %CurrentYear%-%CurrentMonth%%CurrentDay% * Initial creation
+-->
