@@ -212,6 +212,7 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
+    <None Include=".editorconfig" />
     <None Include="Resources\sync.gif" />
     <None Include="Resources\cog.png" />
     <None Include="Resources\exit.gif" />
