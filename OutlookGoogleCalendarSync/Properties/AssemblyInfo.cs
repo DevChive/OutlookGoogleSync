@@ -6,15 +6,15 @@ using System.Runtime.InteropServices;
 
 #endregion
 
-// General Information about an assembly is controlled through the following
+// General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("OutlookGoogleCalendarSync")]
-[assembly: AssemblyDescription("Modified by DJS")]
+[assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Xeno Innovations, Paul Woolcock")]
+[assembly: AssemblyCompany("Paul Woolcock")]
 [assembly: AssemblyProduct("Outlook Google Calendar Sync")]
-[assembly: AssemblyCopyright("Copyright 2015-2016")]
+[assembly: AssemblyCopyright("Copyright 2014")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -26,7 +26,7 @@ using System.Runtime.InteropServices;
 //
 // Major.Minor.Build.Revision
 //
-// You can specify all the values or you can use the default the Revision and
+// You can specify all the values or you can use the default the Revision and 
 // Build Numbers by using the '*' as shown below:
-[assembly: AssemblyVersion("2.0.*")]
-[assembly: AssemblyFileVersionAttribute("2.1.0.1")]
+[assembly: AssemblyVersion("2.2.*")]
+[assembly: AssemblyFileVersionAttribute("2.2.3.0")]

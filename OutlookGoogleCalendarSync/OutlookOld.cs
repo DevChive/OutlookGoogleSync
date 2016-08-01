@@ -83,7 +83,12 @@ namespace OutlookGoogleCalendarSync {
             return currentUserName;
         }
         public Boolean Offline() {
-            return oApp.GetNamespace("mapi").Offline;
+            try {
+                return oApp.GetNamespace("mapi").Offline;
+            } catch {
+                OutlookCalendar.Instance.Reset();
+                return oApp.GetNamespace("mapi").Offline;
+            }
         }
         public OlExchangeConnectionMode ExchangeConnectionMode() {
             return exchangeConnectionMode;
@@ -155,13 +160,14 @@ namespace OutlookGoogleCalendarSync {
         public String GetRecipientEmail(Recipient recipient) {
             String retEmail = "";
             log.Fine("Determining email of recipient: " + recipient.Name);
+            AddressEntry addressEntry;
             try {
-                AddressEntry addressEntry = recipient.AddressEntry;
+                addressEntry = recipient.AddressEntry;
             } catch {
                 log.Warn("Can't resolve this recipient!");
-                recipient.AddressEntry = null;
+                addressEntry = null;
             }
-            if (recipient.AddressEntry == null) {
+            if (addressEntry == null) {
                 log.Warn("No AddressEntry exists!");
                 retEmail = EmailAddress.BuildFakeEmailAddress(recipient.Name);
                 EmailAddress.IsValidEmail(retEmail);
@@ -190,7 +196,7 @@ namespace OutlookGoogleCalendarSync {
                 retEmail = retEmail.Substring(retEmail.IndexOf("<") + 1);
                 retEmail = retEmail.TrimEnd(Convert.ToChar(">"));
             }
-            log.Fine("Email address: " + retEmail);
+            log.Fine("Email address: " + retEmail, retEmail);
             EmailAddress.IsValidEmail(retEmail);
             return retEmail;
         }
@@ -204,6 +210,10 @@ namespace OutlookGoogleCalendarSync {
             } 
         }
 
+        public object GetCategories() {
+            return null;
+        }
+        
         #region Addin Express Code
         //This code has been sourced from:
         //https://www.add-in-express.com/creating-addins-blog/2009/05/08/outlook-exchange-email-address-smtp/

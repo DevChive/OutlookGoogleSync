@@ -58,12 +58,27 @@ namespace OutlookGoogleCalendarSync {
             
             // Get the Calendar folders
             useOutlookCalendar = getDefaultCalendar(oNS);
-            if (MainForm.Instance.IsHandleCreated) { //resetting connection, so pick up selected calendar from GUI dropdown
-                //***This might be cross thread, so don't rely on MainForm
+            if (MainForm.Instance.IsHandleCreated) {
+                log.Fine("Resetting connection, so re-selecting calendar from GUI dropdown");
+
+                MainForm.Instance.cbOutlookCalendars.SelectedIndexChanged -= MainForm.Instance.cbOutlookCalendar_SelectedIndexChanged; 
                 MainForm.Instance.cbOutlookCalendars.DataSource = new BindingSource(calendarFolders, null);
-                KeyValuePair<String, MAPIFolder> calendar = (KeyValuePair<String, MAPIFolder>)MainForm.Instance.cbOutlookCalendars.SelectedItem;
-                calendar = (KeyValuePair<String, MAPIFolder>)MainForm.Instance.cbOutlookCalendars.SelectedItem;
+                
+                //Select the right calendar
+                int c = 0;
+                foreach (KeyValuePair<String, MAPIFolder> calendarFolder in calendarFolders) {
+                    if (calendarFolder.Value.EntryID == Settings.Instance.UseOutlookCalendar.Id) {
+                        MainForm.Instance.SetControlPropertyThreadSafe(MainForm.Instance.cbOutlookCalendars, "SelectedIndex", c);
+                    }
+                    c++;
+                }
+                if ((int)MainForm.Instance.GetControlPropertyThreadSafe(MainForm.Instance.cbOutlookCalendars, "SelectedIndex") == -1)
+                    MainForm.Instance.SetControlPropertyThreadSafe(MainForm.Instance.cbOutlookCalendars, "SelectedIndex", 0);
+
+                KeyValuePair<String, MAPIFolder> calendar = (KeyValuePair<String, MAPIFolder>)MainForm.Instance.GetControlPropertyThreadSafe(MainForm.Instance.cbOutlookCalendars, "SelectedItem");
                 useOutlookCalendar = calendar.Value;
+
+                MainForm.Instance.cbOutlookCalendars.SelectedIndexChanged += MainForm.Instance.cbOutlookCalendar_SelectedIndexChanged;
             }
 
             // Done. Log off.
@@ -179,13 +194,14 @@ namespace OutlookGoogleCalendarSync {
         public String GetRecipientEmail(Recipient recipient) {
             String retEmail = "";
             log.Fine("Determining email of recipient: " + recipient.Name);
+            AddressEntry addressEntry;
             try {
-                AddressEntry addressEntry = recipient.AddressEntry;
+                addressEntry = recipient.AddressEntry;
             } catch {
                 log.Warn("Can't resolve this recipient!");
-                recipient.AddressEntry = null;
+                addressEntry = null;
             }
-            if (recipient.AddressEntry == null) {
+            if (addressEntry == null) {
                 log.Warn("No AddressEntry exists!");
                 retEmail = EmailAddress.BuildFakeEmailAddress(recipient.Name);
                 EmailAddress.IsValidEmail(retEmail);
@@ -252,23 +268,47 @@ namespace OutlookGoogleCalendarSync {
                 retEmail = retEmail.Substring(retEmail.IndexOf("<") + 1);
                 retEmail = retEmail.TrimEnd(Convert.ToChar(">"));
             }
-            log.Fine("Email address: " + retEmail);
+            log.Fine("Email address: " + retEmail, retEmail);
             EmailAddress.IsValidEmail(retEmail);
             return retEmail;
         }
 
         public String GetGlobalApptID(AppointmentItem ai) {
-            if (ai.GlobalAppointmentID == null) {
-                log.Warn("GlobalAppointmentID is null - this shouldn't happen! Falling back to EntryID.");
+            try {
+                if (ai.GlobalAppointmentID == null)
+                    throw new System.Exception("GlobalAppointmentID is null - this shouldn't happen! Falling back to EntryID.");
+                return ai.GlobalAppointmentID;
+            } catch (System.Exception ex) {
+                log.Warn(ex.Message);
                 return ai.EntryID;
             }
-            return ai.GlobalAppointmentID;
+        }
+
+        public object GetCategories() {
+            return oApp.Session.Categories;
         }
 
         #region TimeZone Stuff
+        //http://stackoverflow.com/questions/17348807/how-to-translate-between-windows-and-iana-time-zones
+        //https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+
         public Event IANAtimezone_set(Event ev, AppointmentItem ai) {
-            ev.Start.TimeZone = IANAtimezone(ai.StartTimeZone.ID, ai.StartTimeZone.Name);
-            ev.End.TimeZone = IANAtimezone(ai.EndTimeZone.ID, ai.EndTimeZone.Name);
+            try {
+                try {
+                    ev.Start.TimeZone = IANAtimezone(ai.StartTimeZone.ID, ai.StartTimeZone.Name);
+                } catch (System.Exception ex) {
+                    log.Debug(ex.Message);
+                    throw new ApplicationException("Failed to set start timezone. [" + ai.StartTimeZone.ID + ", " + ai.StartTimeZone.Name + "]");
+                }
+                try {
+                    ev.End.TimeZone = IANAtimezone(ai.EndTimeZone.ID, ai.EndTimeZone.Name);
+                } catch (System.Exception ex) {
+                    log.Debug(ex.Message);
+                    throw new ApplicationException("Failed to set end timezone. [" + ai.EndTimeZone.ID + ", " + ai.EndTimeZone.Name + "]");
+                }
+            } catch (ApplicationException ex) {
+                log.Warn(ex.Message);
+            }
             return ev;
         }
 
@@ -292,29 +332,35 @@ namespace OutlookGoogleCalendarSync {
             ai.Start = DateTime.Parse(ev.Start.DateTime ?? ev.Start.Date);
             if (!String.IsNullOrEmpty(ev.Start.TimeZone)) ai.StartTimeZone = WindowsTimeZone(ev.Start.TimeZone);
             ai.End = DateTime.Parse(ev.End.DateTime ?? ev.End.Date);
-            if (!String.IsNullOrEmpty(ev.Start.TimeZone)) ai.EndTimeZone = WindowsTimeZone(ev.End.TimeZone);
+            if (!String.IsNullOrEmpty(ev.End.TimeZone)) ai.EndTimeZone = WindowsTimeZone(ev.End.TimeZone);
             return ai;
         }
 
         private Microsoft.Office.Interop.Outlook.TimeZone WindowsTimeZone(string ianaZoneId) {
             Microsoft.Office.Interop.Outlook.TimeZones tzs = oApp.TimeZones;
-            var utcZones = new[] { "Etc/UTC", "Etc/UCT" };
+            var utcZones = new[] { "Etc/UTC", "Etc/UCT", "UTC", "Etc/GMT" };
             if (utcZones.Contains(ianaZoneId, StringComparer.OrdinalIgnoreCase)) {
                 log.Fine("Timezone \"" + ianaZoneId + "\" mapped to \"UTC\"");
                 return tzs["UTC"];
             }
-
+            
             var tzdbSource = NodaTime.TimeZones.TzdbDateTimeZoneSource.Default;
+            
             // resolve any link, since the CLDR doesn't necessarily use canonical IDs
             var links = tzdbSource.CanonicalIdMap
               .Where(x => x.Value.Equals(ianaZoneId, StringComparison.OrdinalIgnoreCase))
               .Select(x => x.Key);
-            var mappings = tzdbSource.WindowsMapping.MapZones;
-            var item = mappings.FirstOrDefault(x => x.TzdbIds.Any(links.Contains));
-            if (item == null) {
 
-                log.Warn("Timezone \"" + ianaZoneId + "\" could not find a mapping");
-                return null;
+            // resolve canonical zones, and include original zone as well
+            var possibleZones = tzdbSource.CanonicalIdMap.ContainsKey(ianaZoneId)
+                ? links.Concat(new[] { tzdbSource.CanonicalIdMap[ianaZoneId], ianaZoneId })
+                : links;
+
+            // map the windows zone
+            var mappings = tzdbSource.WindowsMapping.MapZones;
+            var item = mappings.FirstOrDefault(x => x.TzdbIds.Any(possibleZones.Contains));
+            if (item == null) {
+                throw new System.ApplicationException("Timezone \"" + ianaZoneId + "\" has no mapping.");
             }
             log.Fine("Timezone \"" + ianaZoneId + "\" mapped to \"" + item.WindowsId + "\"");
 

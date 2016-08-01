@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using log4net;
+using System;
 using System.Diagnostics;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.Serialization;
-using log4net;
 
 namespace OutlookGoogleCalendarSync {
     /// <summary>
@@ -18,8 +16,6 @@ namespace OutlookGoogleCalendarSync {
         //Settings saved immediately
         private Boolean apiLimit_inEffect;
         private DateTime apiLimit_lastHit;
-        private DateTime syncStart;
-        private DateTime syncEnd;
         private DateTime lastSyncDate;
         private Int32 completedSyncs;
         private Boolean portable;
@@ -44,12 +40,15 @@ namespace OutlookGoogleCalendarSync {
             EWSpassword = "";
             EWSserver = "";
             UseOutlookCalendar = new MyOutlookCalendarListEntry();
+            CategoriesRestrictBy = RestrictBy.Exclude;
+            Categories = new System.Collections.Generic.List<String>();
             OutlookDateFormat = "g";
 
             UseGoogleCalendar = new MyGoogleCalendarListEntry();
             RefreshToken = "";
             apiLimit_inEffect = false;
             apiLimit_lastHit = DateTime.Parse("01-Jan-2000");
+            GaccountEmail = "";
 
             SyncDirection = new SyncDirection();
             DaysInThePast = 1;
@@ -60,6 +59,10 @@ namespace OutlookGoogleCalendarSync {
             AddDescription = true;
             AddDescription_OnlyToGoogle = true;
             AddReminders = false;
+            UseGoogleDefaultReminder = false;
+            ReminderDND = false;
+            ReminderDNDstart = DateTime.Now.Date.AddHours(22);
+            ReminderDNDend = DateTime.Now.Date.AddDays(1).AddHours(6);
             AddAttendees = true;
             MergeItems = true;
             DisableDelete = true;
@@ -79,6 +82,7 @@ namespace OutlookGoogleCalendarSync {
             Proxy = new SettingsProxy();
 
             alphaReleases = false;
+            Subscribed = DateTime.Parse("01-Jan-2000");
             
             lastSyncDate = new DateTime(0);
             completedSyncs = 0;
@@ -97,12 +101,17 @@ namespace OutlookGoogleCalendarSync {
         }
                 
         #region Outlook
+        public enum RestrictBy {
+            Include, Exclude
+        }   
         [DataMember] public OutlookCalendar.Service OutlookService { get; set; }
         [DataMember] public string MailboxName { get; set; }
         [DataMember] public string EWSuser { get; set; }
         [DataMember] public string EWSpassword { get; set; }
         [DataMember] public string EWSserver { get; set; }
         [DataMember] public MyOutlookCalendarListEntry UseOutlookCalendar { get; set; }
+        [DataMember] public RestrictBy CategoriesRestrictBy { get; set; }
+        [DataMember] public System.Collections.Generic.List<string> Categories { get; set; }
         [DataMember] public string OutlookDateFormat { get; set; }
         #endregion
         #region Google
@@ -122,34 +131,28 @@ namespace OutlookGoogleCalendarSync {
                 if (!loading()) XMLManager.ExportElement("APIlimit_lastHit", value, Program.SettingsFile);
             }
         }
+        [DataMember] public String GaccountEmail { get; set; }
+        public String GaccountEmail_masked() {
+            return EmailAddress.maskAddress(GaccountEmail);
+        }
         #endregion
         #region Sync Options
         //Main
-        private int daysInThePast;
-        private int daysInTheFuture;
-        public DateTime SyncStart { get { return this.syncStart; } }
-        public DateTime SyncEnd { get { return this.syncEnd; } }
+        public DateTime SyncStart { get { return DateTime.Today.AddDays(-DaysInThePast); } }
+        public DateTime SyncEnd { get { return DateTime.Today.AddDays(+DaysInTheFuture + 1); } }
         [DataMember] public SyncDirection SyncDirection { get; set; }
-        [DataMember] public int DaysInThePast {
-            get { return daysInThePast; }
-            set {
-                this.daysInThePast = value;
-                this.syncStart = DateTime.Today.AddDays(-value); 
-            } 
-        }
-        [DataMember] public int DaysInTheFuture {
-            get { return daysInTheFuture; }
-            set {
-                this.daysInTheFuture = value; 
-                this.syncEnd = DateTime.Today.AddDays(+value + 1);
-            }
-        }
+        [DataMember] public int DaysInThePast { get; set; }
+        [DataMember] public int DaysInTheFuture { get; set; }
         [DataMember] public int SyncInterval { get; set; }
         [DataMember] public String SyncIntervalUnit { get; set; }
         [DataMember] public bool OutlookPush { get; set; }
         [DataMember] public bool AddDescription { get; set; }
         [DataMember] public bool AddDescription_OnlyToGoogle { get; set; }
         [DataMember] public bool AddReminders { get; set; }
+        [DataMember] public bool UseGoogleDefaultReminder { get; set; }
+        [DataMember] public bool ReminderDND { get; set; }
+        [DataMember] public DateTime ReminderDNDstart { get; set; }
+        [DataMember] public DateTime ReminderDNDend { get; set; }
         [DataMember] public bool AddAttendees { get; set; }
         [DataMember] public bool MergeItems { get; set; }
         [DataMember] public bool DisableDelete { get; set; }
@@ -194,6 +197,7 @@ namespace OutlookGoogleCalendarSync {
                 if (!loading()) XMLManager.ExportElement("AlphaReleases", value, Program.SettingsFile);
             }
         }
+        [DataMember] public DateTime Subscribed { get; set; }
         #endregion
 
         [DataMember] public DateTime LastSyncDate {
@@ -236,6 +240,8 @@ namespace OutlookGoogleCalendarSync {
             log.Info("OUTLOOK SETTINGS:-");
             log.Info("  Service: "+ OutlookService.ToString());
             log.Info("  Calendar: "+ (UseOutlookCalendar.Name=="Calendar"?"Default ":"") + UseOutlookCalendar.Name);
+            log.Info("  Category Filter: " + CategoriesRestrictBy.ToString());
+            log.Info("  Categories: " + String.Join(",", Categories.ToArray()));
             log.Info("  Filter String: " + OutlookDateFormat);
             
             log.Info("GOOGLE SETTINGS:-");
@@ -253,6 +259,8 @@ namespace OutlookGoogleCalendarSync {
             log.Info("  Push Changes: " + OutlookPush);
             log.Info("  AddDescription: " + AddDescription + "; OnlyToGoogle: " + AddDescription_OnlyToGoogle);
             log.Info("  AddReminders: " + AddReminders);
+            log.Info("    UseGoogleDefaultReminder: " + UseGoogleDefaultReminder);
+            log.Info("    ReminderDND: " + ReminderDND + " (" + ReminderDNDstart.ToString("HH:mm") + "-" + ReminderDNDend.ToString("HH:mm") + ")");
             log.Info("  AddAttendees: " + AddAttendees);
             log.Info("  MergeItems: " + MergeItems);
             log.Info("  DisableDelete: " + DisableDelete);
@@ -291,6 +299,10 @@ namespace OutlookGoogleCalendarSync {
             //((log4net.Repository.Hierarchy.Hierarchy)log.Logger.Repository).Root.Level.Name);
             log.Info("  Logging Level: "+ LoggingLevel);
 
+            log.Info("ABOUT:-");
+            log.Info("  Alpha Releases: " + alphaReleases);
+            log.Info("  Subscribed: " + Subscribed.ToString("dd-MMM-yyyy"));
+            
             log.Info("ENVIRONMENT:-");
             log.Info("  Current Locale: " + System.Globalization.CultureInfo.CurrentCulture.Name);
             log.Info("  Short Date Format: "+ System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortDatePattern);

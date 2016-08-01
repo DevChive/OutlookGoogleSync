@@ -39,7 +39,7 @@
     <CreateWebPageOnPublish>true</CreateWebPageOnPublish>
     <WebPage>publish.htm</WebPage>
     <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>1.2.6.1</ApplicationVersion>
+    <ApplicationVersion>2.2.0.0</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
     <PublishWizardCompleted>true</PublishWizardCompleted>
@@ -70,10 +70,10 @@
     <DefineConstants>TRACE</DefineConstants>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>F01044EC768ADB49FB755F046D5536A3B893FB5E</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>15DA06F346C7AE4E005EC8376E85F411BBF96274</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestKeyFile>OutlookGoogleSync_TemporaryKey.pfx</ManifestKeyFile>
+    <ManifestKeyFile>OGCS_10years.pfx</ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
     <GenerateManifests>true</GenerateManifests>
@@ -81,14 +81,14 @@
   <PropertyGroup>
     <SignManifests>false</SignManifests>
   </PropertyGroup>
-  <PropertyGroup>
-    <NoWin32Manifest>true</NoWin32Manifest>
+  <PropertyGroup />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <PlatformTarget>x86</PlatformTarget>
+    <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
-    <OutputPath>..\bin\Release\</OutputPath>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
-    <OutputPath>..\bin\Debug\</OutputPath>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="DotNetOpenAuth">
@@ -103,16 +103,11 @@
     <Reference Include="Google.Apis.Calendar.v3">
       <HintPath>lib\CalendarService\Google.Apis.Calendar.v3.dll</HintPath>
     </Reference>
-    <Reference Include="Interop.IWshRuntimeLibrary, Version=1.0.0.0, Culture=neutral, processorArchitecture=x86">
-      <SpecificVersion>False</SpecificVersion>
-      <EmbedInteropTypes>True</EmbedInteropTypes>
-      <HintPath>lib\Interop.IWshRuntimeLibrary.dll</HintPath>
-    </Reference>
     <Reference Include="log4net, Version=1.2.10.0, Culture=neutral, PublicKeyToken=1b44e1d426115821, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>lib\log4net.dll</HintPath>
     </Reference>
-    <Reference Include="Microsoft.Office.Interop.Outlook, Version=14.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+    <Reference Include="Microsoft.Office.Interop.Outlook, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <EmbedInteropTypes>True</EmbedInteropTypes>
       <HintPath>lib\Microsoft.Office.Interop.Outlook.DLL</HintPath>
@@ -138,6 +133,9 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AbortableBackgroundWorker.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="EmailAddress.cs" />
     <Compile Include="Exception.cs" />
     <Compile Include="NotificationTray.cs" />
@@ -180,6 +178,9 @@
     </Compile>
     <Compile Include="Settings.cs" />
     <Compile Include="SyncDirection.cs" />
+    <Compile Include="SyncTimer.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="XMLManager.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -220,6 +221,8 @@
   <ItemGroup>
     <None Include=".editorconfig" />
     <None Include=".licenseheader" />
+    <None Include="Resources\delay.png" />
+    <None Include="OGCS_10years.pfx" />
     <None Include="Resources\sync.gif" />
     <None Include="Resources\cog.png" />
     <None Include="Resources\exit.gif" />

@@ -21,6 +21,7 @@ namespace OutlookGoogleCalendarSync {
         private const string logFile = "logger.xml";
         //log4net.Core.Level.Fine == log4net.Core.Level.Debug (30000), so manually changing its value
         public static log4net.Core.Level MyFineLevel = new log4net.Core.Level(25000, "FINE");
+        public static log4net.Core.Level MyUltraFineLevel = new log4net.Core.Level(24000, "ULTRA-FINE"); //Logs email addresses
 
         private const String settingsFilename = "settings.xml";
         private static String settingsFile;
@@ -39,19 +40,8 @@ namespace OutlookGoogleCalendarSync {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            #region SplashScreen
-
-            // DJS - Removed annoying splashscreen
-            //Form splash = new Splash();
-            //splash.Show();
-            //DateTime splashed = DateTime.Now;
-            //while (DateTime.Now < splashed.AddSeconds((System.Diagnostics.Debugger.IsAttached ? 1 : 8)) && !splash.IsDisposed) {
-            //    Application.DoEvents();
-            //    System.Threading.Thread.Sleep(100);
-            //}
-            //if (!splash.IsDisposed) splash.Close();
-            #endregion
-
+            // Splash.ShowMe();     // Remvoed by DJS
+           
             log.Debug("Loading settings from file.");
             Settings.Load();
             isNewVersion();
@@ -65,11 +55,12 @@ namespace OutlookGoogleCalendarSync {
                 MessageBox.Show(ex.Message, "Application terminated!", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
             } catch (Exception ex) {
                 log.Fatal("Application unexpectedly terminated!");
-                log.Fatal(ex.Message);
+                log.Fatal(ex.GetType().ToString() +": "+ ex.Message);
                 log.Fatal(ex.StackTrace);
                 MessageBox.Show(ex.Message, "Application unexpectedly terminated!", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 OutlookCalendar.Instance.IOutlook.Disconnect();
             }
+            // Splash.CloseMe();    // Remvoed by DJS
             GC.Collect();
             GC.WaitForPendingFinalizers();
             log.Info("Application closed.");
@@ -98,6 +89,7 @@ namespace OutlookGoogleCalendarSync {
                     startingTab = "Help";
                 }
             }
+            log.Info("Running from " + System.Windows.Forms.Application.ExecutablePath);
 
             //Now let's confirm the actual setting
             settingsFile = Path.Combine(UserFilePath, settingsFilename);
@@ -116,52 +108,117 @@ namespace OutlookGoogleCalendarSync {
 
             string logLevel = XMLManager.ImportElement("LoggingLevel", settingsFile);
             Settings.configureLoggingLevel(logLevel ?? "FINE");
+            purgeLogFiles(30);
         }
 
         private static void initialiseLogger(string logPath, Boolean bootstrap = false) {
             log4net.GlobalContext.Properties["LogPath"] = logPath + "\\";
             log4net.LogManager.GetRepository().LevelMap.Add(MyFineLevel);
+            log4net.LogManager.GetRepository().LevelMap.Add(MyUltraFineLevel);
             XmlConfigurator.Configure(new System.IO.FileInfo(logFile));
 
             if (bootstrap) log.Info("Program started: v" + Application.ProductVersion);
         }
 
+        private static void purgeLogFiles(Int16 retention) {
+            log.Info("Purging log files older than "+ retention +" days...");
+            foreach (String file in System.IO.Directory.GetFiles(UserFilePath, "*.log.????-??-??", SearchOption.TopDirectoryOnly)) {
+                if (System.IO.File.GetLastWriteTime(file) < DateTime.Now.AddDays(-retention)) {
+                    log.Debug("Deleted "+ file);
+                    System.IO.File.Delete(file);
+                }
+            }
+            log.Info("Purge complete.");
+        }
+
         #region Application Behaviour
-        public static void CreateStartupShortcut(Boolean recreate = false) {
-            Boolean startupShortcutExists = Program.CheckShortcut(Environment.SpecialFolder.Startup);
-            if (startupShortcutExists && recreate) {
-                log.Debug("Recreating startup shortcut.");
+        #region Startup Registry Key
+        private static String startupKeyPath = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+
+        public static void ManageStartupRegKey(Boolean recreate = false) {
+            //Check for legacy Startup menu shortcut <=v2.1.4
+            Boolean startupConfigExists = Program.CheckShortcut(Environment.SpecialFolder.Startup);
+            if (startupConfigExists) 
                 Program.RemoveShortcut(Environment.SpecialFolder.Startup);
-                startupShortcutExists = false;
+
+            startupConfigExists = checkRegKey();
+            
+            if (Settings.Instance.StartOnStartup && !startupConfigExists)
+                addRegKey();
+            else if (!Settings.Instance.StartOnStartup && startupConfigExists)
+                removeRegKey();
+            else if (startupConfigExists && recreate) {
+                log.Debug("Forcing update of startup registry key.");
+                addRegKey();
             }
-            if (Settings.Instance.StartOnStartup && !startupShortcutExists)
-                Program.AddShortcut(Environment.SpecialFolder.Startup);
-            else if (!Settings.Instance.StartOnStartup && startupShortcutExists)
-                Program.RemoveShortcut(Environment.SpecialFolder.Startup);
         }
 
-        public static void AddShortcut(Environment.SpecialFolder directory, String subdir = "") {
-            log.Debug("AddShortcut: directory=" + directory.ToString() + "; subdir=" + subdir);
-            String appPath = Application.ExecutablePath;
-            if (subdir != "") subdir = "\\" + subdir;
-            String shortcutDir = Environment.GetFolderPath(directory) + subdir;
-
-            if (!System.IO.Directory.Exists(shortcutDir)) {
-                log.Debug("Creating directory " + shortcutDir);
-                System.IO.Directory.CreateDirectory(shortcutDir);
-            }
-
-            string shortcutLocation = System.IO.Path.Combine(shortcutDir, "OutlookGoogleCalendarSync.lnk");
-            IWshRuntimeLibrary.WshShell shell = new IWshRuntimeLibrary.WshShell();
-            IWshRuntimeLibrary.IWshShortcut shortcut = shell.CreateShortcut(shortcutLocation) as IWshRuntimeLibrary.WshShortcut;
-
-            shortcut.Description = "Synchronise Outlook and Google calendars";
-            shortcut.IconLocation = appPath.ToLower().Replace("OutlookGoogleCalendarSync.exe", "icon.ico");
-            shortcut.TargetPath = appPath;
-            shortcut.WorkingDirectory = Application.StartupPath;
-            shortcut.Save();
-            log.Info("Created shortcut in \"" + shortcutDir + "\"");
+        private static Boolean checkRegKey() {
+            String[] regKeys = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(startupKeyPath).GetValueNames();
+            return regKeys.Contains(Application.ProductName);
         }
+
+        private static void addRegKey() {
+            Microsoft.Win32.RegistryKey startupKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(startupKeyPath, true);
+            String keyValue = startupKey.GetValue(Application.ProductName, "").ToString();
+            if (keyValue == "" || keyValue != Application.ExecutablePath) {
+                log.Debug("Startup registry key "+ (keyValue == "" ? "created" : "updated") +".");
+                startupKey.SetValue(Application.ProductName, Application.ExecutablePath);
+            }
+            startupKey.Close();
+        }
+
+        private static void removeRegKey() {
+            log.Debug("Startup registry key being removed.");
+            Microsoft.Win32.RegistryKey startupKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(startupKeyPath, true);
+            startupKey.DeleteValue(Application.ProductName, false);
+        }
+        #endregion
+
+        #region Legacy Start Menu Shortcut
+        //public static void AddShortcut(Environment.SpecialFolder directory, String subdir = "") {
+        //    log.Debug("AddShortcut: directory=" + directory.ToString() + "; subdir=" + subdir);
+        //    String appPath = Application.ExecutablePath;
+        //    if (subdir != "") subdir = "\\" + subdir;
+        //    String shortcutDir = Environment.GetFolderPath(directory) + subdir;
+
+        //    if (!System.IO.Directory.Exists(shortcutDir)) {
+        //        log.Debug("Creating directory " + shortcutDir);
+        //        System.IO.Directory.CreateDirectory(shortcutDir);
+        //    }
+
+        //    string shortcutLocation = System.IO.Path.Combine(shortcutDir, Application.ProductName + ".lnk");
+        //    #region "Windows Script Host Object Model - 32bit only"
+        //    /*
+        //    IWshRuntimeLibrary.WshShell shell = new IWshRuntimeLibrary.WshShell();
+        //    IWshRuntimeLibrary.IWshShortcut shortcut = shell.CreateShortcut(shortcutLocation) as IWshRuntimeLibrary.WshShortcut;
+        //    shortcut.Description = "Synchronise Outlook and Google calendars";
+        //    shortcut.IconLocation = appPath.ToLower().Replace("OutlookGoogleCalendarSync.exe", "icon.ico");
+        //    shortcut.TargetPath = appPath;
+        //    shortcut.WorkingDirectory = Application.StartupPath;
+        //    shortcut.Save();
+        //    */
+        //    #endregion
+        //    #region "C:\Windows\System32\shell32.dll - works but only compiles in VSE 2010?!"
+        //    /*
+        //    System.IO.File.WriteAllBytes(shortcutLocation, new byte[] { });
+            
+        //    //Initialize a ShellLinkObject for that .lnk file
+        //    Shell32.Shell shl = new Shell32.ShellClass();
+        //    Shell32.Folder dir = shl.NameSpace(shortcutDir);
+        //    Shell32.FolderItem itm = dir.Items().Item(Application.ProductName + ".lnk");
+        //    Shell32.ShellLinkObject lnk = (Shell32.ShellLinkObject)itm.GetLink;
+
+        //    lnk.Path = appPath;
+        //    lnk.Description = "Synchronise Outlook and Google calendars";
+        //    lnk.WorkingDirectory = Application.StartupPath;
+        //    lnk.SetIconLocation(appPath.ToLower().Replace("OutlookGoogleCalendarSync.exe", "icon.ico"), 0);
+            
+        //    lnk.Save(shortcutLocation);
+        //    */
+        //    #endregion
+        //    log.Info("Created shortcut in \"" + shortcutDir + "\"");
+        //}
 
         public static Boolean CheckShortcut(Environment.SpecialFolder directory, String subdir = "") {
             log.Debug("CheckShortcut: directory=" + directory.ToString() + "; subdir=" + subdir);
@@ -172,7 +229,8 @@ namespace OutlookGoogleCalendarSync {
             if (!System.IO.Directory.Exists(shortcutDir)) return false;
 
             foreach (String file in System.IO.Directory.GetFiles(shortcutDir)) {
-                if (file.EndsWith("\\OutlookGoogleCalendarSync.lnk")) {
+                if (file.EndsWith("\\OutlookGoogleCalendarSync.lnk") || //legacy name <=v2.1.0.0
+                    file.EndsWith("\\" + Application.ProductName + ".lnk")) {
                     foundShortcut = true;
                     break;
                 }
@@ -181,22 +239,29 @@ namespace OutlookGoogleCalendarSync {
         }
 
         public static void RemoveShortcut(Environment.SpecialFolder directory, String subdir = "") {
-            log.Debug("RemoveShortcut: directory=" + directory.ToString() + "; subdir=" + subdir);
-            if (subdir != "") subdir = "\\" + subdir;
-            String shortcutDir = Environment.GetFolderPath(directory) + subdir;
+            try {
+                log.Debug("RemoveShortcut: directory=" + directory.ToString() + "; subdir=" + subdir);
+                if (subdir != "") subdir = "\\" + subdir;
+                String shortcutDir = Environment.GetFolderPath(directory) + subdir;
 
-            if (!System.IO.Directory.Exists(shortcutDir)) {
-                log.Info("Failed to delete shortcut in \"" + shortcutDir + "\" - directory does not exist.");
-                return;
-            }
-            foreach (String file in System.IO.Directory.GetFiles(shortcutDir)) {
-                if (file.EndsWith("\\OutlookGoogleCalendarSync.lnk")) {
-                    System.IO.File.Delete(file);
-                    log.Info("Deleted shortcut in \"" + shortcutDir + "\"");
-                    break;
+                if (!System.IO.Directory.Exists(shortcutDir)) {
+                    log.Info("Failed to delete shortcut in \"" + shortcutDir + "\" - directory does not exist.");
+                    return;
                 }
+                foreach (String file in System.IO.Directory.GetFiles(shortcutDir)) {
+                    if (file.EndsWith("\\OutlookGoogleCalendarSync.lnk") || //legacy name <=v2.1.0.0
+                        file.EndsWith("\\" + Application.ProductName + ".lnk")) {
+                        System.IO.File.Delete(file);
+                        log.Info("Deleted shortcut in \"" + shortcutDir + "\"");
+                        break;
+                    }
+                }
+            } catch (System.Exception ex) {
+                log.Warn("Problem trying to remove legacy Start Menu shortcut.");
+                log.Error(ex.Message);
             }
         }
+        #endregion
 
         public static void MakePortable(Boolean portable) {
             if (portable) {
@@ -237,7 +302,9 @@ namespace OutlookGoogleCalendarSync {
                     File.Delete(dstFile);
                     log.Debug("  " + Path.GetFileName(file));
                     if (file.EndsWith(".log")) {
+                        log.Logger.Repository.Shutdown();
                         log4net.LogManager.Shutdown();
+                        LogManager.GetRepository().ResetConfiguration();
                         File.Move(file, dstFile);
                         initialiseLogger(dstDir);
                     } else {
@@ -266,6 +333,7 @@ namespace OutlookGoogleCalendarSync {
             if (System.Diagnostics.Debugger.IsAttached) return;
 
             Program.isManualCheck = isManualCheck;
+            log.Debug((isManualCheck ? "Manual" : "Automatic") + " update check requested.");
             if (isManualCheck) MainForm.Instance.btCheckForUpdate.Text = "Checking...";
 
             if (isClickOnceInstall()) {
@@ -304,13 +372,13 @@ namespace OutlookGoogleCalendarSync {
 
                 if (!e.IsUpdateRequired) {
                     log.Info("This is an optional update.");
-                    DialogResult dr = MessageBox.Show("An update is available. Would you like to update the application now?", "Update Available", MessageBoxButtons.YesNo);
+                    DialogResult dr = MessageBox.Show("An update for OGCS is available. Would you like to update the application now?", "OGCS Update Available", MessageBoxButtons.YesNo);
                     if (dr == DialogResult.Yes) {
                         beginUpdate();
                     }
                 } else {
                     log.Info("This is a mandatory update.");
-                    MessageBox.Show("A mandatory update is available. The update will be installed now and the application restarted.", "Update Required", MessageBoxButtons.OK);
+                    MessageBox.Show("A mandatory update for OGCS is required. The update will be installed now and the application restarted.", "OCGS Update Required", MessageBoxButtons.OK);
                     beginUpdate();
                 }
             } else {
@@ -392,7 +460,7 @@ namespace OutlookGoogleCalendarSync {
                 Int32 myReleaseNum = Convert.ToInt32(paddedVersion);
                 if (releaseNum > myReleaseNum) {
                     log.Info("New " + releaseType + " ZIP release found: " + releaseVersion);
-                    DialogResult dr = MessageBox.Show("A new " + releaseType + " release is available. Would you like to upgrade to v" + releaseVersion + "?", "New Release Available", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                    DialogResult dr = MessageBox.Show("A new " + releaseType + " release is available for OGCS. Would you like to upgrade to v" + releaseVersion + "?", "New OGCS Release Available", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                     if (dr == DialogResult.Yes) {
                         System.Diagnostics.Process.Start(releaseURL);
                     }
@@ -421,7 +489,7 @@ namespace OutlookGoogleCalendarSync {
             string settingsVersion = string.IsNullOrEmpty(Settings.Instance.Version) ? "Unknown" : Settings.Instance.Version;
             if (settingsVersion != Application.ProductVersion) {
                 log.Info("New version detected - upgraded from " + settingsVersion + " to " + Application.ProductVersion);
-                Program.CreateStartupShortcut(recreate: true);
+                Program.ManageStartupRegKey(recreate: true);
                 Settings.Instance.Version = Application.ProductVersion;
                 System.Diagnostics.Process.Start("https://outlookgooglecalendarsync.codeplex.com/wikipage?title=Release Notes");
             }
